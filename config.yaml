@@ -1,0 +1,24 @@
+destination:
+  folder: INBOX
+  host: imap2.example.com
+  password: dest_password
+  port: 993
+  ssl: true
+  user: dest_user@example.com
+interval: 3
+sources:
+- delete_after_move: false
+  host: pop.example.com
+  password: source1_password
+  port: 995
+  protocol: pop3
+  ssl: true
+  user: source1@example.com
+- delete_after_move: true
+  folder: INBOX
+  host: imap.source.com
+  password: source2_password
+  port: 993
+  protocol: imap
+  ssl: true
+  user: source2@example.com
