@@ -7,6 +7,8 @@ import os
 import signal
 import threading
 import subprocess
+import tempfile
+import psutil
 from typing import Dict, Any
 
 # コアロジックをインポート
@@ -27,6 +29,45 @@ def setup_logging(verbose: bool):
     )
 
 logger = logging.getLogger(__name__)
+
+# PIDファイルのパス
+PID_FILE = os.path.join(tempfile.gettempdir(), 'mailconsolidator.pid')
+
+def write_pid_file():
+    """現在のプロセスIDをPIDファイルに書き込む"""
+    try:
+        with open(PID_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+        logger.info(f"PIDファイルを作成しました: {PID_FILE}")
+    except Exception as e:
+        logger.error(f"PIDファイルの作成に失敗しました: {e}")
+
+def read_pid_file():
+    """PIDファイルからプロセスIDを読み込む"""
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, 'r') as f:
+                return int(f.read().strip())
+    except Exception as e:
+        logger.error(f"PIDファイルの読み込みに失敗しました: {e}")
+    return None
+
+def remove_pid_file():
+    """PIDファイルを削除する"""
+    try:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+            logger.info(f"PIDファイルを削除しました: {PID_FILE}")
+    except Exception as e:
+        logger.error(f"PIDファイルの削除に失敗しました: {e}")
+
+def is_process_running(pid):
+    """指定されたPIDのプロセスが実行中かチェック"""
+    try:
+        process = psutil.Process(pid)
+        return process.is_running()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return False
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """設定ファイルを読み込み、パスワードを復号化する"""
@@ -72,11 +113,16 @@ def run_daemon(config_path: str):
     """デーモンモードで実行"""
     logger.info("デーモンモードで起動しました")
     
+    # PIDファイルを作成
+    write_pid_file()
+    
     stop_event = threading.Event()
 
     def signal_handler(signum, frame):
         logger.info(f"シグナル {signum} を受信しました。終了処理を開始します...")
         stop_event.set()
+        # PIDファイルを削除
+        remove_pid_file()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -103,11 +149,55 @@ def run_daemon(config_path: str):
                 break
             time.sleep(1)
             
+    # 正常終了時もPIDファイルを削除
+    remove_pid_file()
     logger.info("デーモンプロセスを終了します")
+
+def kill_daemon():
+    """バックグラウンドで実行中のデーモンを停止する"""
+    pid = read_pid_file()
+    
+    if pid is None:
+        logger.error("PIDファイルが見つかりません。デーモンは起動していない可能性があります。")
+        return False
+    
+    if not is_process_running(pid):
+        logger.warning(f"PID {pid} のプロセスは実行されていません。")
+        remove_pid_file()
+        return False
+    
+    try:
+        logger.info(f"デーモンプロセス (PID: {pid}) を停止しています...")
+        process = psutil.Process(pid)
+        process.terminate()
+        
+        # プロセスが終了するまで待機 (最大10秒)
+        try:
+            process.wait(timeout=10)
+            logger.info("デーモンプロセスを正常に停止しました")
+        except psutil.TimeoutExpired:
+            logger.warning("プロセスが応答しないため、強制終了します")
+            process.kill()
+            logger.info("デーモンプロセスを強制終了しました")
+        
+        remove_pid_file()
+        return True
+        
+    except psutil.NoSuchProcess:
+        logger.error(f"PID {pid} のプロセスが見つかりません")
+        remove_pid_file()
+        return False
+    except psutil.AccessDenied:
+        logger.error(f"PID {pid} のプロセスへのアクセスが拒否されました")
+        return False
+    except Exception as e:
+        logger.error(f"プロセスの停止中にエラーが発生しました: {e}")
+        return False
 
 def main():
     parser = argparse.ArgumentParser(description='MailConsolidator: メール集約ツール')
     parser.add_argument('-d', '--daemon', action='store_true', help='デーモンモードで実行 (GUIなし)')
+    parser.add_argument('-k', '--kill', action='store_true', help='バックグラウンドで実行中のデーモンを停止')
     parser.add_argument('-c', '--config', default='config.yaml', help='設定ファイルのパス (デフォルト: config.yaml)')
     parser.add_argument('-v', '--verbose', action='store_true', help='詳細ログをコンソールに表示')
     
@@ -115,6 +205,11 @@ def main():
     
     # ログ設定を初期化
     setup_logging(args.verbose)
+    
+    # -k オプションが指定された場合、デーモンを停止して終了
+    if args.kill:
+        kill_daemon()
+        sys.exit(0)
     
     config_path = args.config
     

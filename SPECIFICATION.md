@@ -8,10 +8,10 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 - **Model (Logic)**: `core.py`, `mail_client.py` - メール処理のコアロジック
 - **View/Controller (GUI)**: `gui.py` - Tkinterによる画面表示とイベントハンドリング
 - **Configuration**: `config.yaml` - 設定データ
-- **Entry Point**: `main.py` - アプリケーション起動エントリ
+- **Entry Point**: `main.py` - アプリケーション起動エントリ、デーモン管理機能
 
 ### 1.2 ファイル構成
-- `main.py`: アプリケーションの起動スクリプト。コマンドライン引数の解析とGUI/デーモンモードの切り替えを行う。
+- `main.py`: アプリケーションの起動スクリプト。コマンドライン引数の解析とGUI/デーモンモードの切り替え、デーモンプロセスの管理（起動・停止）を行う。
 - `gui.py`: Tkinterを使用したGUIアプリケーションクラス `MailConsolidatorApp` を定義。
 - `core.py`: メール集約の一括処理ロジック `run_batch` を定義。
 - `mail_client.py`: メールサーバとの通信を行うクラス群 (`Pop3Source`, `ImapSource`, `ImapDestination`)。
@@ -54,13 +54,9 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 - 単一のソースに対する処理フロー:
   1. サーバ接続 (POP3/IMAP)。
   2. メッセージ一覧取得（IMAPは未読のみ）。
-  3. 各メッセージについて:
-     - ヘッダ解析。
-     - 転送先へアップロード (`append_message`)。
-     - 成功時:
-       - `delete_after_move=True`: 元メッセージを削除。
-       - `delete_after_move=False`: 元メッセージに既読フラグを付与 (IMAPのみ)。
-     - 失敗時: エラーログ出力、削除/既読化はスキップ。
+
+#### クラス: `Pop3Source`
+- `get_messages()`: 全メッセージを取得する(POP3の仕様上、未読管理はクライアント側で行う必要があるが、本仕様では全件取得とし、重複排除は行わないため `delete_after_move=True` 推奨)。
 
 ### 2.3 メールクライアント仕様 (`mail_client.py`)
 
@@ -68,8 +64,55 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 - `get_messages()`: `SEARCH UNSEEN` コマンドを使用し、未読メールのみを取得する。
 - `mark_as_read(uid)`: 指定されたUIDのメールに `\Seen` フラグを付与する。
 
-#### クラス: `Pop3Source`
-- `get_messages()`: 全メッセージを取得する（POP3の仕様上、未読管理はクライアント側で行う必要があるが、本仕様では全件取得とし、重複排除は行わないため `delete_after_move=True` 推奨）。
+#### クラス: `ImapDestination`
+- `append_message(message_data, folder)`: メッセージを指定フォルダにアップロードする。
+
+### 2.4 デーモン管理仕様 (`main.py`)
+
+#### PIDファイル管理
+- **PIDファイルパス**: `{temp_dir}/mailconsolidator.pid`
+  - Windows: `C:\Users\{username}\AppData\Local\Temp\mailconsolidator.pid`
+  - Unix系: `/tmp/mailconsolidator.pid`
+- **PIDファイル作成**: デーモン起動時に現在のプロセスIDを書き込む。
+- **PIDファイル削除**: デーモン終了時(正常終了・シグナル受信時)に削除する。
+
+#### ヘルパー関数
+- `write_pid_file()`: 現在のプロセスIDをPIDファイルに書き込む。
+- `read_pid_file()`: PIDファイルからプロセスIDを読み込む。存在しない場合は `None` を返す。
+- `remove_pid_file()`: PIDファイルを削除する。
+- `is_process_running(pid)`: 指定されたPIDのプロセスが実行中かチェックする(`psutil`を使用)。
+
+#### 関数: `run_daemon(config_path)`
+- デーモンモードでの実行ロジック。
+- 起動時に `write_pid_file()` を呼び出してPIDファイルを作成。
+- シグナルハンドラ(SIGINT, SIGTERM)で `remove_pid_file()` を呼び出してPIDファイルを削除。
+- 正常終了時も `remove_pid_file()` を呼び出す。
+
+#### 関数: `kill_daemon()`
+- バックグラウンドで実行中のデーモンプロセスを停止する。
+- 処理フロー:
+  1. `read_pid_file()` でPIDを取得。
+  2. PIDファイルが存在しない場合、エラーメッセージを表示して終了。
+  3. `is_process_running(pid)` でプロセスの存在を確認。
+  4. プロセスが存在しない場合、PIDファイルを削除して終了。
+  5. `psutil.Process(pid).terminate()` でSIGTERMを送信(正常終了を試みる)。
+  6. 最大10秒間プロセスの終了を待機。
+  7. タイムアウトした場合、`process.kill()` でSIGKILLを送信(強制終了)。
+  8. 終了後、`remove_pid_file()` でPIDファイルを削除。
+- エラーハンドリング:
+  - `psutil.NoSuchProcess`: プロセスが見つからない場合、PIDファイルを削除。
+  - `psutil.AccessDenied`: アクセス拒否エラーを表示。
+  - その他の例外: エラーメッセージを表示。
+
+#### コマンドライン引数
+- `-d`, `--daemon`: デーモンモードで起動(バックグラウンド実行)。
+- `-k`, `--kill`: 実行中のデーモンを停止して即座に終了。
+- `-c`, `--config`: 設定ファイルのパスを指定(デフォルト: `config.yaml`)。
+- `-v`, `--verbose`: 詳細ログをコンソールに表示。
+
+### 2.5 セキュリティ仕様 (`crypto_helper.py`)
+- パスワードの暗号化・復号化を行う `PasswordCrypto` クラスを提供。
+- 設定ファイル内のパスワードは暗号化して保存される。
 
 ## 3. データ構造
 
@@ -95,6 +138,7 @@ sources:               # 取得元リスト
 ```
 
 ## 4. 変更履歴 (Recent Changes)
+- **デーモン管理機能追加**: `-k` オプションによるバックグラウンドデーモンの停止機能を追加。PIDファイルを使用したプロセス追跡・管理を実装。
 - **GUI更新不具合修正**: `Listbox` の `exportselection=False` 設定により、編集時の選択解除を防止。
 - **バックグラウンド実行改善**: 定期実行の開始/停止トグルボタンの実装、UIブロックの解消、停止処理中のフィードバック追加。
 - **メール取得ロジック変更**: IMAP取得時に未読メールのみを対象とするよう変更。
