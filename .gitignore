@@ -1,0 +1,5 @@
+# testファイルの除外
+test*
+
+# __pycache__フォルダの除外
+/__pycache__/

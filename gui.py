@@ -176,6 +176,10 @@ class MailConsolidatorApp:
 
         self.lbl_status = ttk.Label(controls, text="待機中", foreground="gray")
         self.lbl_status.pack(side="left", padx=10)
+        
+        # 右寄せで終了ボタン
+        self.btn_quit = ttk.Button(controls, text="アプリを終了", command=self.quit_app)
+        self.btn_quit.pack(side="right", padx=5)
 
         # ログ表示エリア
         log_frame = ttk.LabelFrame(frame, text="実行ログ", padding="5")

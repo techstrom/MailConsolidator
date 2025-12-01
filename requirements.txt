@@ -1,3 +1,5 @@
 PyYAML
 cryptography
 psutil
+pystray
+Pillow

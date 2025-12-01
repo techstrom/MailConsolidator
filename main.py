@@ -199,22 +199,22 @@ def main():
     parser.add_argument('-d', '--daemon', action='store_true', help='デーモンモードで実行 (GUIなし)')
     parser.add_argument('-k', '--kill', action='store_true', help='バックグラウンドで実行中のデーモンを停止')
     parser.add_argument('-c', '--config', default='config.yaml', help='設定ファイルのパス (デフォルト: config.yaml)')
-    parser.add_argument('-v', '--verbose', action='store_true', help='詳細ログをコンソールに表示')
+    parser.add_argument('-v', '--verbose', action='store_true', help='詳細ログをコンソールに表示（GUIモード）')
     
     args = parser.parse_args()
     
-    # ログ設定を初期化
-    setup_logging(args.verbose)
-    
     # -k オプションが指定された場合、デーモンを停止して終了
     if args.kill:
+        setup_logging(True)
         kill_daemon()
         sys.exit(0)
     
     config_path = args.config
     
     if args.daemon:
-        # バックグラウンドでデーモンを起動
+        # -d オプション: GUIなしでバックグラウンド実行
+        setup_logging(args.verbose)
+        
         if os.name == 'nt':  # Windows
             # 自分自身を再起動（--daemon-worker フラグ付き）
             cmd = [sys.executable, __file__, '--daemon-worker', '-c', config_path]
@@ -241,9 +241,10 @@ def main():
             run_daemon(config_path)
     elif '--daemon-worker' in sys.argv:
         # Windows用の内部フラグ（バックグラウンドワーカー）
+        setup_logging(args.verbose)
         run_daemon(config_path)
-    else:
-        # GUIモード
+    elif '--gui-worker' in sys.argv:
+        # Windows用の内部フラグ（GUIワーカー）
         try:
             import tkinter as tk
             from gui import MailConsolidatorApp
@@ -251,13 +252,60 @@ def main():
             root = tk.Tk()
             app = MailConsolidatorApp(root, config_path=config_path)
             root.mainloop()
-        except ImportError:
-            logger.error("Tkinterが見つかりません。GUIモードを実行できません。")
-            sys.exit(1)
-        except Exception as e:
-            logger.error(f"GUI起動エラー: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass  # バックグラウンドなのでエラーは無視
+    else:
+        # デフォルト: GUIモード
+        if args.verbose:
+            # -v オプション: フォアグラウンドでGUI起動（ログ表示）
+            setup_logging(True)
+            try:
+                import tkinter as tk
+                from gui import MailConsolidatorApp
+                
+                root = tk.Tk()
+                app = MailConsolidatorApp(root, config_path=config_path)
+                root.mainloop()
+            except ImportError:
+                logger.error("Tkinterが見つかりません。GUIモードを実行できません。")
+                sys.exit(1)
+            except Exception as e:
+                logger.error(f"GUI起動エラー: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            # オプションなし: バックグラウンドでGUI起動（プロンプトが戻る）
+            if os.name == 'nt':  # Windows
+                # 自分自身を再起動（--gui-worker フラグ付き）
+                cmd = [sys.executable, __file__, '--gui-worker', '-c', config_path]
+                
+                # DETACHED_PROCESS フラグでバックグラウンド起動
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NO_WINDOW = 0x08000000
+                subprocess.Popen(
+                    cmd,
+                    creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                print("GUIをバックグラウンドで起動しました")
+            else:  # Unix系
+                # フォークしてバックグラウンド実行
+                pid = os.fork()
+                if pid > 0:
+                    print(f"GUIをバックグラウンドで起動しました (PID: {pid})")
+                    sys.exit(0)
+                # 子プロセスでGUI実行
+                try:
+                    import tkinter as tk
+                    from gui import MailConsolidatorApp
+                    
+                    root = tk.Tk()
+                    app = MailConsolidatorApp(root, config_path=config_path)
+                    root.mainloop()
+                except Exception:
+                    pass  # バックグラウンドなのでエラーは無視
 
 if __name__ == "__main__":
     main()

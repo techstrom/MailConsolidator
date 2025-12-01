@@ -11,8 +11,9 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 - **Entry Point**: `main.py` - アプリケーション起動エントリ、デーモン管理機能
 
 ### 1.2 ファイル構成
-- `main.py`: アプリケーションの起動スクリプト。コマンドライン引数の解析とGUI/デーモンモードの切り替え、デーモンプロセスの管理（起動・停止）を行う。
-- `gui.py`: Tkinterを使用したGUIアプリケーションクラス `MailConsolidatorApp` を定義。
+- `main.py`: アプリケーションの起動スクリプト。コマンドライン引数の解析とGUI/デーモンモードの切り替え、デーモンプロセスの管理（起動・停止）を行う。起動モード（デフォルト/フォアグラウンド/デーモン）の制御も担当。
+- `gui.py`: Tkinterを使用したGUIアプリケーションクラス `MailConsolidatorApp` を定義。Windows環境ではシステムトレイ機能も統合。
+- `tray_icon.py`: Windows環境でのシステムトレイアイコン管理クラス `SystemTrayIcon` を定義（Windows専用）。
 - `core.py`: メール集約の一括処理ロジック `run_batch` を定義。
 - `mail_client.py`: メールサーバとの通信を行うクラス群 (`Pop3Source`, `ImapSource`, `ImapDestination`)。
 - `crypto_helper.py`: パスワードの暗号化・復号化を行うユーティリティ。
@@ -65,39 +66,6 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 - `mark_as_read(uid)`: 指定されたUIDのメールに `\Seen` フラグを付与する。
 
 #### クラス: `ImapDestination`
-- `append_message(message_data, folder)`: メッセージを指定フォルダにアップロードする。
-
-### 2.4 デーモン管理仕様 (`main.py`)
-
-#### PIDファイル管理
-- **PIDファイルパス**: `{temp_dir}/mailconsolidator.pid`
-  - Windows: `C:\Users\{username}\AppData\Local\Temp\mailconsolidator.pid`
-  - Unix系: `/tmp/mailconsolidator.pid`
-- **PIDファイル作成**: デーモン起動時に現在のプロセスIDを書き込む。
-- **PIDファイル削除**: デーモン終了時(正常終了・シグナル受信時)に削除する。
-
-#### ヘルパー関数
-- `write_pid_file()`: 現在のプロセスIDをPIDファイルに書き込む。
-- `read_pid_file()`: PIDファイルからプロセスIDを読み込む。存在しない場合は `None` を返す。
-- `remove_pid_file()`: PIDファイルを削除する。
-- `is_process_running(pid)`: 指定されたPIDのプロセスが実行中かチェックする(`psutil`を使用)。
-
-#### 関数: `run_daemon(config_path)`
-- デーモンモードでの実行ロジック。
-- 起動時に `write_pid_file()` を呼び出してPIDファイルを作成。
-- シグナルハンドラ(SIGINT, SIGTERM)で `remove_pid_file()` を呼び出してPIDファイルを削除。
-- 正常終了時も `remove_pid_file()` を呼び出す。
-
-#### 関数: `kill_daemon()`
-- バックグラウンドで実行中のデーモンプロセスを停止する。
-- 処理フロー:
-  1. `read_pid_file()` でPIDを取得。
-  2. PIDファイルが存在しない場合、エラーメッセージを表示して終了。
-  3. `is_process_running(pid)` でプロセスの存在を確認。
-  4. プロセスが存在しない場合、PIDファイルを削除して終了。
-  5. `psutil.Process(pid).terminate()` でSIGTERMを送信(正常終了を試みる)。
-  6. 最大10秒間プロセスの終了を待機。
-  7. タイムアウトした場合、`process.kill()` でSIGKILLを送信(強制終了)。
   8. 終了後、`remove_pid_file()` でPIDファイルを削除。
 - エラーハンドリング:
   - `psutil.NoSuchProcess`: プロセスが見つからない場合、PIDファイルを削除。
