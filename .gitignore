@@ -6,3 +6,6 @@ test*
 
 # build フォルダの除外
 /build/
+
+# log ファイルを除外
+*.log
