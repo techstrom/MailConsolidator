@@ -9,3 +9,9 @@ test*
 
 # log ファイルを除外
 *.log
+
+# dist フォルダの除外
+dist/
+
+# specファイル
+MailConsolidator.spec
