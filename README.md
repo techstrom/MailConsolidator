@@ -69,8 +69,21 @@ python main.py -d -c config.yaml
 ```
 
 オプション：
-- `-d`, `--daemon`: デーモンモードで実行
+- `-d`, `--daemon`: デーモンモードで実行（バックグラウンドで起動し、プロンプトが即座に戻ります）
 - `-c`, `--config`: 設定ファイルのパスを指定（デフォルト: `config.yaml`）
+- `-v`, `--verbose`: 詳細ログをコンソールに表示（デフォルトではログを表示しません）
+
+例：
+```bash
+# バックグラウンドで起動（ログなし）
+python main.py -d
+
+# バックグラウンドで起動（ログあり）
+python main.py -d -v
+
+# GUIモードでログを表示
+python main.py -v
+```
 
 ## ドキュメント
 

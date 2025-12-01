@@ -6,20 +6,26 @@ import time
 import os
 import signal
 import threading
+import subprocess
 from typing import Dict, Any
 
 # コアロジックをインポート
 from core import run_batch
 from crypto_helper import PasswordCrypto
 
-# ログ設定
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+def setup_logging(verbose: bool):
+    """ログ設定を初期化"""
+    handlers = []
+    if verbose:
+        handlers.append(logging.StreamHandler(sys.stdout))
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=handlers,
+        force=True  # 既存の設定を上書き
+    )
+
 logger = logging.getLogger(__name__)
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -103,12 +109,43 @@ def main():
     parser = argparse.ArgumentParser(description='MailConsolidator: メール集約ツール')
     parser.add_argument('-d', '--daemon', action='store_true', help='デーモンモードで実行 (GUIなし)')
     parser.add_argument('-c', '--config', default='config.yaml', help='設定ファイルのパス (デフォルト: config.yaml)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='詳細ログをコンソールに表示')
     
     args = parser.parse_args()
+    
+    # ログ設定を初期化
+    setup_logging(args.verbose)
     
     config_path = args.config
     
     if args.daemon:
+        # バックグラウンドでデーモンを起動
+        if os.name == 'nt':  # Windows
+            # 自分自身を再起動（--daemon-worker フラグ付き）
+            cmd = [sys.executable, __file__, '--daemon-worker', '-c', config_path]
+            if args.verbose:
+                cmd.append('-v')
+            
+            # DETACHED_PROCESS フラグでバックグラウンド起動
+            DETACHED_PROCESS = 0x00000008
+            subprocess.Popen(
+                cmd,
+                creationflags=DETACHED_PROCESS,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL
+            )
+            logger.info("デーモンをバックグラウンドで起動しました")
+        else:  # Unix系
+            # フォークしてバックグラウンド実行
+            pid = os.fork()
+            if pid > 0:
+                logger.info(f"デーモンをバックグラウンドで起動しました (PID: {pid})")
+                sys.exit(0)
+            # 子プロセスでデーモン実行
+            run_daemon(config_path)
+    elif '--daemon-worker' in sys.argv:
+        # Windows用の内部フラグ（バックグラウンドワーカー）
         run_daemon(config_path)
     else:
         # GUIモード
