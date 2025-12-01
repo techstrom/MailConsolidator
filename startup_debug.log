@@ -1,4 +1,0 @@
-Executing command: C:\Users\fujisawa\miniconda3\envs\MailConsolidator\python.exe C:\Users\fujisawa\Antigravity\MailConsolidator-github\MailConsolidator\main.py --gui-worker -c config.yaml
-sys.executable: C:\Users\fujisawa\miniconda3\envs\MailConsolidator\python.exe
-__file__: C:\Users\fujisawa\Antigravity\MailConsolidator-github\MailConsolidator\main.py
-config_path: config.yaml
