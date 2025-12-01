@@ -3,3 +3,6 @@ test*
 
 # __pycache__フォルダの除外
 /__pycache__/
+
+# build フォルダの除外
+/build/

@@ -13,6 +13,16 @@ from core import run_batch
 from crypto_helper import PasswordCrypto
 import copy
 
+# Windows環境でのみシステムトレイをインポート
+if os.name == 'nt':
+    try:
+        from tray_icon import SystemTrayIcon
+        TRAY_AVAILABLE = True
+    except ImportError:
+        TRAY_AVAILABLE = False
+else:
+    TRAY_AVAILABLE = False
+
 class QueueHandler(logging.Handler):
     """ログをキューに保存するハンドラ"""
     def __init__(self, log_queue):
@@ -60,11 +70,19 @@ class MailConsolidatorApp:
 
         self.config = self.load_config()
         self.is_running = False
+        self.is_background_running = False  # トレイメニュー用
         self.stop_event = threading.Event()
         self.bg_thread = None
+        self.tray_icon = None
 
         self.create_widgets()
         self.setup_logging()
+        
+        # Windows環境ならシステムトレイを初期化
+        if TRAY_AVAILABLE:
+            self.tray_icon = SystemTrayIcon(self)
+            self.tray_icon.run()
+            logging.info("システムトレイアイコンを起動しました")
 
     def on_closing(self):
         if self.is_running:
@@ -478,6 +496,7 @@ class MailConsolidatorApp:
             # 完全に停止したことを確認してから戻すのが安全。
             # ここでは「停止中...」にしておく
             self.btn_toggle_bg.config(text="停止処理中...")
+            self.is_background_running = False
         else:
             # 開始処理
             try:
@@ -493,6 +512,7 @@ class MailConsolidatorApp:
                 return
 
             self.is_running = True
+            self.is_background_running = True
             self.stop_event.clear()
             self.btn_toggle_bg.config(text="定期実行を停止")
             self.lbl_status.config(text=f"実行中 (間隔: {interval}分)", foreground="green")
@@ -500,6 +520,10 @@ class MailConsolidatorApp:
             self.bg_thread = threading.Thread(target=self._background_loop, args=(interval,), daemon=True)
             self.bg_thread.start()
             logging.info(f"定期実行を開始しました (間隔: {interval}分)")
+        
+        # トレイメニューを更新
+        if TRAY_AVAILABLE and self.tray_icon:
+            self.tray_icon.update_menu()
 
     def _background_loop(self, interval_minutes):
         try:
@@ -526,9 +550,37 @@ class MailConsolidatorApp:
 
     def _reset_ui_state(self):
         self.is_running = False
+        self.is_background_running = False
         self.stop_event.clear() # 次回のためにクリア
         self.btn_toggle_bg.config(text="定期実行を開始", state='normal')
         self.lbl_status.config(text="停止中", foreground="red")
         logging.info("定期実行が完全に停止しました")
+        
+        # トレイメニューを更新
+        if TRAY_AVAILABLE and self.tray_icon:
+            self.tray_icon.update_menu()
+    
+    def show_window(self):
+        """ウィンドウを表示（トレイから復帰）"""
+        self.root.deiconify()
+        self.root.state('normal')
+        self.root.lift()
+        self.root.focus_force()
+    
+    def hide_window(self):
+        """ウィンドウを非表示（トレイに格納）"""
+        self.root.withdraw()
+    
+    def quit_app(self):
+        """アプリケーションを完全に終了"""
+        if self.is_running:
+            self.stop_event.set()
+        
+        # トレイアイコンを停止
+        if TRAY_AVAILABLE and self.tray_icon:
+            self.tray_icon.stop()
+        
+        self.root.quit()
+        self.root.destroy()
 
 

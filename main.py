@@ -195,6 +195,69 @@ def kill_daemon():
         return False
 
 def main():
+    # 内部フラグを先にチェック（argparseの前）
+    if '--daemon-worker' in sys.argv:
+        # Windows用の内部フラグ（バックグラウンドワーカー）
+        # config_pathを取得
+        config_path = 'config.yaml'
+        if '-c' in sys.argv:
+            idx = sys.argv.index('-c')
+            if idx + 1 < len(sys.argv):
+                config_path = sys.argv[idx + 1]
+        
+        verbose = '-v' in sys.argv
+        setup_logging(verbose)
+        run_daemon(config_path)
+        return
+    
+    if '--gui-worker' in sys.argv:
+        # Windows用の内部フラグ（GUIワーカー）
+        # config_pathを取得
+        config_path = 'config.yaml'
+        if '-c' in sys.argv:
+            idx = sys.argv.index('-c')
+            if idx + 1 < len(sys.argv):
+                config_path = sys.argv[idx + 1]
+        
+        # デバッグ用にログファイルを作成
+        import datetime
+        log_file = f'gui_worker_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+        
+        with open(log_file, 'w') as f:
+            f.write(f"GUI Worker started at {datetime.datetime.now()}\n")
+            f.write(f"sys.argv: {sys.argv}\n")
+            f.write(f"config_path: {config_path}\n")
+            f.flush()
+            
+            try:
+                f.write("Importing tkinter...\n")
+                f.flush()
+                import tkinter as tk
+                
+                f.write("Importing MailConsolidatorApp...\n")
+                f.flush()
+                from gui import MailConsolidatorApp
+                
+                f.write("Creating Tk root...\n")
+                f.flush()
+                root = tk.Tk()
+                
+                f.write("Creating MailConsolidatorApp...\n")
+                f.flush()
+                app = MailConsolidatorApp(root, config_path=config_path)
+                
+                f.write("Starting mainloop...\n")
+                f.flush()
+                root.mainloop()
+                
+                f.write("Mainloop ended\n")
+            except Exception as e:
+                f.write(f"ERROR: {e}\n")
+                import traceback
+                f.write(traceback.format_exc())
+        return
+    
+    # 通常のargparse処理
     parser = argparse.ArgumentParser(description='MailConsolidator: メール集約ツール')
     parser.add_argument('-d', '--daemon', action='store_true', help='デーモンモードで実行 (GUIなし)')
     parser.add_argument('-k', '--kill', action='store_true', help='バックグラウンドで実行中のデーモンを停止')
@@ -239,21 +302,6 @@ def main():
                 sys.exit(0)
             # 子プロセスでデーモン実行
             run_daemon(config_path)
-    elif '--daemon-worker' in sys.argv:
-        # Windows用の内部フラグ（バックグラウンドワーカー）
-        setup_logging(args.verbose)
-        run_daemon(config_path)
-    elif '--gui-worker' in sys.argv:
-        # Windows用の内部フラグ（GUIワーカー）
-        try:
-            import tkinter as tk
-            from gui import MailConsolidatorApp
-            
-            root = tk.Tk()
-            app = MailConsolidatorApp(root, config_path=config_path)
-            root.mainloop()
-        except Exception:
-            pass  # バックグラウンドなのでエラーは無視
     else:
         # デフォルト: GUIモード
         if args.verbose:
@@ -279,12 +327,18 @@ def main():
                 # 自分自身を再起動（--gui-worker フラグ付き）
                 cmd = [sys.executable, __file__, '--gui-worker', '-c', config_path]
                 
+                # デバッグ: コマンドをログに記録
+                with open('startup_debug.log', 'w') as f:
+                    f.write(f"Executing command: {' '.join(cmd)}\n")
+                    f.write(f"sys.executable: {sys.executable}\n")
+                    f.write(f"__file__: {__file__}\n")
+                    f.write(f"config_path: {config_path}\n")
+                
                 # DETACHED_PROCESS フラグでバックグラウンド起動
                 DETACHED_PROCESS = 0x00000008
-                CREATE_NO_WINDOW = 0x08000000
                 subprocess.Popen(
                     cmd,
-                    creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW,
+                    creationflags=DETACHED_PROCESS,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     stdin=subprocess.DEVNULL
