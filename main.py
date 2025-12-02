@@ -12,7 +12,7 @@ import psutil
 from typing import Dict, Any
 
 # コアロジックをインポート
-from core import run_batch, PIDManager
+from core import run_batch, PIDManager, get_default_config_path, migrate_config_if_needed
 from crypto_helper import PasswordCrypto
 
 def setup_logging(verbose: bool, log_file: str = None):
@@ -167,7 +167,7 @@ def main():
     if '--daemon-worker' in sys.argv:
         # Windows用の内部フラグ（バックグラウンドワーカー）
         # config_pathを取得
-        config_path = 'config.yaml'
+        config_path = get_default_config_path()
         if '-c' in sys.argv:
             idx = sys.argv.index('-c')
             if idx + 1 < len(sys.argv):
@@ -189,7 +189,7 @@ def main():
     if '--gui-worker' in sys.argv:
         # Windows用の内部フラグ（GUIワーカー）
         # config_pathを取得
-        config_path = 'config.yaml'
+        config_path = get_default_config_path()
         if '-c' in sys.argv:
             idx = sys.argv.index('-c')
             if idx + 1 < len(sys.argv):
@@ -229,11 +229,14 @@ def main():
                 pass
         return
     
+    # 設定ファイルの移行処理
+    migrate_config_if_needed()
+    
     # 通常のargparse処理
     parser = argparse.ArgumentParser(description='MailConsolidator: メール集約ツール')
     parser.add_argument('-d', '--daemon', action='store_true', help='デーモンモードで実行 (GUIなし)')
     parser.add_argument('-k', '--kill', action='store_true', help='バックグラウンドで実行中のデーモンを停止')
-    parser.add_argument('-c', '--config', default='config.yaml', help='設定ファイルのパス (デフォルト: config.yaml)')
+    parser.add_argument('-c', '--config', default=get_default_config_path(), help=f'設定ファイルのパス (デフォルト: {get_default_config_path()})')
     parser.add_argument('-v', '--verbose', action='store_true', help='詳細ログをコンソールに表示（GUIモード）')
     parser.add_argument('-l', '--log-file', help='ログファイルのパス（指定した場合のみファイルに出力）')
     

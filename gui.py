@@ -10,7 +10,7 @@ from typing import Dict, Any
 
 # core.py からロジックをインポート
 # core.py からロジックをインポート
-from core import run_batch, PIDManager
+from core import run_batch, PIDManager, get_default_config_path
 from crypto_helper import PasswordCrypto
 import copy
 import socket
@@ -87,9 +87,9 @@ class GuiLogHandler:
             self.text_widget.after(self.interval_ms, self.update_log)
 
 class MailConsolidatorApp:
-    def __init__(self, root, config_path='config.yaml'):
+    def __init__(self, root, config_path=None):
         self.root = root
-        self.config_path = config_path
+        self.config_path = config_path or get_default_config_path()
         self.root.title(f"MailConsolidator Manager ({self.config_path})")
         self.root.geometry("800x600")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)

@@ -13,6 +13,50 @@ logger = logging.getLogger(__name__)
 
 PID_FILE = os.path.join(tempfile.gettempdir(), 'mailconsolidator.pid')
 
+def get_default_config_path() -> str:
+    """
+    プラットフォームに応じた適切な設定ファイルパスを返す
+    
+    Windows: %APPDATA%\MailConsolidator\config.yaml
+    Unix系: ~/.config/MailConsolidator/config.yaml
+    """
+    if os.name == 'nt':  # Windows
+        appdata = os.environ.get('APPDATA')
+        if appdata:
+            config_dir = os.path.join(appdata, 'MailConsolidator')
+        else:
+            # APPDATAが取得できない場合のフォールバック
+            config_dir = os.path.join(os.path.expanduser('~'), 'MailConsolidator')
+    else:  # Unix系
+        config_dir = os.path.join(os.path.expanduser('~'), '.config', 'MailConsolidator')
+    
+    # ディレクトリが存在しない場合は作成
+    os.makedirs(config_dir, exist_ok=True)
+    
+    return os.path.join(config_dir, 'config.yaml')
+
+def migrate_config_if_needed():
+    """
+    起動フォルダに古い設定ファイルがある場合、新しい場所にコピーする
+    既に新しい場所に設定ファイルがある場合は何もしない
+    """
+    old_config_path = 'config.yaml'
+    new_config_path = get_default_config_path()
+    
+    # 新しい場所に既に設定ファイルがある場合は何もしない
+    if os.path.exists(new_config_path):
+        return
+    
+    # 古い場所に設定ファイルがある場合はコピー
+    if os.path.exists(old_config_path):
+        try:
+            import shutil
+            shutil.copy2(old_config_path, new_config_path)
+            logger.info(f"設定ファイルを移行しました: {old_config_path} -> {new_config_path}")
+        except Exception as e:
+            logger.warning(f"設定ファイルの移行に失敗しました: {e}")
+
+
 class PIDManager:
     @staticmethod
     def write_pid(port: int = 0):
