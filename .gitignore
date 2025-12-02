@@ -4,10 +4,9 @@ test*
 # __pycache__フォルダの除外
 /__pycache__/
 
-# build フォルダの除外
+# pyinstallerのbuild,dist フォルダの除外
 /build/
+/dist/
 
 # log ファイルを除外
 *.log
-
-/dist-old/
