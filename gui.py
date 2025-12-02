@@ -85,13 +85,50 @@ class MailConsolidatorApp:
             logging.info("システムトレイアイコンを起動しました")
 
     def on_closing(self):
-        if self.is_running:
-            if messagebox.askokcancel("終了", "定期実行中です。終了しますか？"):
-                self.stop_event.set()
-                self.root.destroy()
-        else:
-            self.stop_event.set() # 手動実行中などのため念のため
-            self.root.destroy()
+        # カスタムダイアログを作成
+        dialog = tk.Toplevel(self.root)
+        dialog.title("終了確認")
+        dialog.geometry("400x150")
+        dialog.resizable(False, False)
+        
+        # モーダルにする
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 画面中央に配置
+        try:
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 200
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 75
+            dialog.geometry(f"+{x}+{y}")
+        except Exception:
+            pass # 座標計算に失敗した場合はデフォルト位置
+        
+        ttk.Label(dialog, text="ウィンドウを閉じようとしています。\nどのように処理しますか？", padding=20, justify='center').pack()
+        
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill='x', padx=20, pady=10)
+        
+        def on_quit():
+            dialog.destroy()
+            self.quit_app()
+            
+        def on_hide():
+            dialog.destroy()
+            self.hide_window()
+            
+        def on_cancel():
+            dialog.destroy()
+            
+        # ボタン配置
+        ttk.Button(btn_frame, text="アプリを終了", command=on_quit).pack(side='left', expand=True, padx=5)
+        if TRAY_AVAILABLE:
+            ttk.Button(btn_frame, text="バックグラウンド常駐", command=on_hide).pack(side='left', expand=True, padx=5)
+        ttk.Button(btn_frame, text="キャンセル", command=on_cancel).pack(side='left', expand=True, padx=5)
+        
+        # Xボタンでキャンセル扱い
+        dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+        
+        self.root.wait_window(dialog)
 
     def load_config(self) -> Dict[str, Any]:
         if os.path.exists(self.config_path):
