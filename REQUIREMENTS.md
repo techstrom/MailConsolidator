@@ -75,5 +75,7 @@
 
 ### 3.3 環境
 - **OS**: Windows (主なターゲット), Unix系OSもサポート
+  - ※システムトレイ機能はWindowsのみサポート
 - **言語**: Python 3.x
 - **ライブラリ**: Tkinter (GUI), imaplib, poplib, PyYAML, cryptography, psutil, pystray, Pillow
+- **開発ツール**: PyInstaller (exe化用)
