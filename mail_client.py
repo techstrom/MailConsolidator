@@ -4,10 +4,28 @@ import email
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 import logging
+import ssl
+import ssl
+# import certifi  <-- Removed top-level import to avoid ModuleNotFoundError in frozen app
 
 # ログ設定
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+import sys
+import os
+
+# SSL証明書の設定（PyInstaller対応）
+def create_ssl_context():
+    """SSL/TLSコンテキストを作成（PyInstaller環境でも動作）"""
+    # one-folderモードでは証明書検証を有効にできる
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    # デフォルトの証明書検証を使用（システムの証明書ストア）
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    # システムのデフォルト証明書をロード
+    context.load_default_certs()
+    return context
 
 class MailSource(ABC):
     """メール取得元の基底クラス"""
@@ -48,7 +66,8 @@ class Pop3Source(MailSource):
     def connect(self):
         logger.info(f"POP3サーバ {self.host}:{self.port} に接続中...")
         if self.ssl:
-            self.connection = poplib.POP3_SSL(self.host, self.port)
+            context = create_ssl_context()
+            self.connection = poplib.POP3_SSL(self.host, self.port, context=context)
         else:
             self.connection = poplib.POP3(self.host, self.port)
         self.connection.user(self.user)
@@ -105,7 +124,8 @@ class ImapSource(MailSource):
     def connect(self):
         logger.info(f"IMAPサーバ {self.host}:{self.port} に接続中...")
         if self.ssl:
-            self.connection = imaplib.IMAP4_SSL(self.host, self.port)
+            context = create_ssl_context()
+            self.connection = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=context)
         else:
             self.connection = imaplib.IMAP4(self.host, self.port)
         
@@ -192,7 +212,8 @@ class ImapDestination:
     def connect(self):
         logger.info(f"移動先IMAPサーバ {self.host}:{self.port} に接続中...")
         if self.ssl:
-            self.connection = imaplib.IMAP4_SSL(self.host, self.port)
+            context = create_ssl_context()
+            self.connection = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=context)
         else:
             self.connection = imaplib.IMAP4(self.host, self.port)
         

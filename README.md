@@ -16,7 +16,7 @@ MailConsolidatorは、複数のメールサーバからメールを取得し、�
 - **単一インスタンス制御**: 既に起動している場合は既存のGUIを表示（IPC通信）
 - **柔軟な削除設定**: 取得元サーバにメールを残すか削除するかを選択可能
 - **SSL/TLS暗号化**: セキュアな通信をサポート
-- **exe化対応**: PyInstallerを使用してWindows実行ファイルを作成可能
+- **Windows インストーラー**: 簡単にインストールできる Windows インストーラーを提供
 
 ## 必要要件
 
@@ -26,8 +26,25 @@ MailConsolidatorは、複数のメールサーバからメールを取得し、�
 - cryptography
 - pystray (Windowsシステムトレイ用)
 - Pillow (画像処理用)
+- certifi (SSL証明書用)
 
 ## インストール
+
+### Windows ユーザー向け（推奨）
+
+Windows インストーラーを使用すると、簡単にインストールできます：
+
+1. **インストーラーをダウンロード**:
+   - [MailConsolidator-Setup-1.0.0.exe](https://github.com/techstrom/MailConsolidator/raw/main/installer_output/MailConsolidator-Setup-1.0.0.exe) をダウンロード
+
+2. **インストーラーを実行**:
+   - ダウンロードした `MailConsolidator-Setup-1.0.0.exe` をダブルクリック
+   - インストールウィザードの指示に従ってインストール
+
+3. **起動**:
+   - スタートメニューまたはデスクトップアイコンから起動
+
+### 開発者向け（ソースから実行）
 
 1. リポジトリをクローンまたはダウンロード
 ```bash
@@ -40,12 +57,10 @@ cd MailConsolidator
 pip install -r requirements.txt
 ```
 
-3. (オプション) Windows実行ファイル(exe)の作成
+3. Python スクリプトとして実行
 ```bash
-pip install pyinstaller
-pyinstaller MailConsolidator.spec
+python main.py
 ```
-`dist/MailConsolidator.exe` が生成されます。
 
 ## 使い方
 
@@ -75,6 +90,7 @@ python main.py
 3. **実行パネル**:
    - 「今すぐ実行」: 即座にメール集約を実行
    - 「定期実行を開始/停止」: 指定した間隔（分単位）で自動実行のON/OFFを切り替え
+     - **自動保存**: 実行間隔を変更してフォーカスを外すと、自動的に設定ファイルに保存されます。
    - 「アプリを終了」: アプリケーションを完全に終了（右端に配置）
    - メール処理状況モニター: リアルタイムで処理状況を確認
 
@@ -322,6 +338,17 @@ sources:
 2. SSL設定が正しいか確認（Gmailは`ssl: true`）
 3. ファイアウォールでブロックされていないか確認
 4. IMAPアクセスが有効になっているか確認（Gmail設定）
+
+### exe実行時にSSLエラーが発生する
+
+**症状**: `[Errno 2] No such file or directory: ... base_library.zip`
+
+**解決方法**:
+最新のバージョンでは `certifi` を使用して修正されています。最新のコードを取得して再ビルドしてください。
+```bash
+pip install certifi
+pyinstaller MailConsolidator.spec
+```
 
 ## ライセンス
 

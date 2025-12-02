@@ -3,3 +3,4 @@ cryptography
 psutil
 pystray
 Pillow
+certifi

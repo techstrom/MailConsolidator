@@ -30,6 +30,7 @@
   - **手動実行**: 「今すぐ実行」ボタンにより、即座に集約処理を実行可能とする。
   - **定期実行**:
     - 指定した間隔（分）でバックグラウンドで集約処理を実行可能とする。
+    - **設定保存**: 実行間隔の変更は、入力フィールドからフォーカスが外れた時点で自動的に設定ファイルに保存されること。
     - 「定期実行を開始/停止」ボタンにより、処理のON/OFFを切り替え可能とする。
     - 実行中はボタン名を「定期実行を停止」に変更し、停止操作を受け付けること。
     - 停止処理中は「停止処理中...」等のフィードバックを表示すること。
@@ -87,5 +88,11 @@
 - **OS**: Windows (主なターゲット), Unix系OSもサポート
   - ※システムトレイ機能はWindowsのみサポート
 - **言語**: Python 3.x
-- **ライブラリ**: Tkinter (GUI), imaplib, poplib, PyYAML, cryptography, psutil, pystray, Pillow
+- **ライブラリ**: Tkinter (GUI), imaplib, poplib, PyYAML, cryptography, psutil, pystray, Pillow, certifi
 - **開発ツール**: PyInstaller (exe化用)
+## 5. 配布方法
+- **Windows**: Inno Setup を使用したインストーラーを提供
+  - PyInstaller で one-folder 形式の実行ファイルを生成
+  - Inno Setup でインストーラーを作成
+  - ユーザーはインストーラーを実行するだけで簡単にインストール可能
+- **その他のOS**: Python スクリプトとして配布
