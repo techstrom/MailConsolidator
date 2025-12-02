@@ -55,7 +55,7 @@ GUIを起動して設定と実行を行います：
 ```bash
 python main.py
 ```
-または、生成した `MailConsolidator.exe` を実行します。
+または、GitHubリポジトリの `dist` フォルダにある [`MailConsolidator.exe`](./dist/MailConsolidator.exe) をダウンロードして直接実行することも可能です。
 
 #### GUI操作方法
 
