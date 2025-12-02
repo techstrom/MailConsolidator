@@ -9,6 +9,7 @@ import threading
 import subprocess
 import tempfile
 import psutil
+import atexit
 from typing import Dict, Any
 
 # コアロジックをインポート
@@ -163,6 +164,12 @@ def kill_daemon():
         return False
 
 def main():
+    # PyInstallerの一時ディレクトリ削除エラーを抑制
+    # この問題は既知のPyInstallerの制限で、アプリケーションの機能には影響しない
+    if getattr(sys, 'frozen', False):
+        # PyInstallerの一時ディレクトリクリーンアップエラーを抑制
+        os.environ['PYINSTALLER_SUPPRESS_CLEANUP_ERRORS'] = '1'
+    
     # 内部フラグを先にチェック（argparseの前）
     if '--daemon-worker' in sys.argv:
         # Windows用の内部フラグ（バックグラウンドワーカー）

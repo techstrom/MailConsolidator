@@ -32,12 +32,14 @@ class IPCServer:
         self.sock.bind(('127.0.0.1', 0)) # 0 means auto-assign port
         self.port = self.sock.getsockname()[1]
         self.sock.listen(1)
+        self.running = True
         self.thread = threading.Thread(target=self._listen_loop, daemon=True)
         self.thread.start()
         logging.info(f"IPCサーバーを開始しました (Port: {self.port})")
 
     def _listen_loop(self):
-        while True:
+        self.sock.settimeout(1.0)  # タイムアウトを設定して終了を検知できるように
+        while self.running:
             try:
                 conn, addr = self.sock.accept()
                 with conn:
@@ -45,9 +47,20 @@ class IPCServer:
                     if data == b'SHOW_WINDOW':
                         logging.info("GUI表示リクエストを受信しました")
                         self.app.root.after(0, self.app.show_window)
+            except socket.timeout:
+                continue  # タイムアウトしたらループを続ける
             except Exception as e:
-                logging.error(f"IPCサーバーエラー: {e}")
+                if self.running:  # 終了中でない場合のみエラーを表示
+                    logging.error(f"IPCサーバーエラー: {e}")
                 break
+    
+    def stop(self):
+        """サーバーを停止"""
+        self.running = False
+        try:
+            self.sock.close()
+        except Exception:
+            pass
 
 class QueueHandler(logging.Handler):
     """ログをキューに保存するハンドラ"""
@@ -258,7 +271,10 @@ class MailConsolidatorApp:
         # 定期実行設定
         ttk.Label(controls, text="実行間隔(分):").pack(side="left", padx=5)
         self.interval_var = tk.StringVar(value=str(self.config.get('interval', 3)))
-        ttk.Entry(controls, textvariable=self.interval_var, width=5).pack(side="left")
+        interval_entry = ttk.Entry(controls, textvariable=self.interval_var, width=5)
+        interval_entry.pack(side="left")
+        # フォーカスを失った時に自動保存
+        interval_entry.bind('<FocusOut>', self.on_interval_changed)
 
         # バックグラウンド実行スイッチ
         self.btn_toggle_bg = ttk.Button(controls, text="定期実行を開始", command=self.toggle_background_task)
@@ -553,6 +569,22 @@ class MailConsolidatorApp:
             logging.info("=== 実行終了 ===")
             self.root.after(0, lambda: self.btn_run_now.config(state='normal'))
 
+    def on_interval_changed(self, event=None):
+        """実行間隔が変更された時に設定を保存"""
+        try:
+            interval = int(self.interval_var.get())
+            if interval <= 0:
+                raise ValueError
+            
+            # 設定に保存
+            self.config['interval'] = interval
+            self.save_config()
+            logging.info(f"実行間隔を {interval} 分に変更しました")
+        except ValueError:
+            # 無効な値の場合は元の値に戻す
+            self.interval_var.set(str(self.config.get('interval', 3)))
+            logging.warning("実行間隔は正の整数で入力してください")
+
     def toggle_background_task(self):
         if self.is_running:
             # 停止処理
@@ -645,8 +677,16 @@ class MailConsolidatorApp:
     
     def quit_app(self):
         """アプリケーションを完全に終了"""
+        # バックグラウンドタスクを停止
         if self.is_running:
             self.stop_event.set()
+            # スレッドが終了するまで少し待つ
+            if self.bg_thread and self.bg_thread.is_alive():
+                self.bg_thread.join(timeout=2)
+        
+        # IPCサーバーを停止
+        if self.ipc_server:
+            self.ipc_server.stop()
         
         # PIDファイルを削除
         PIDManager.remove_pid()
@@ -655,7 +695,15 @@ class MailConsolidatorApp:
         if TRAY_AVAILABLE and self.tray_icon:
             self.tray_icon.stop()
         
-        self.root.quit()
-        self.root.destroy()
+        # Tkinterを終了
+        try:
+            self.root.quit()
+        except Exception:
+            pass
+        
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
 
 
