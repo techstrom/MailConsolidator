@@ -1,11 +1,78 @@
 import logging
 import threading
 import email
+import os
+import tempfile
+import psutil
+import socket
 from email.header import decode_header
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, Tuple
 from mail_client import Pop3Source, ImapSource, ImapDestination
 
 logger = logging.getLogger(__name__)
+
+PID_FILE = os.path.join(tempfile.gettempdir(), 'mailconsolidator.pid')
+
+class PIDManager:
+    @staticmethod
+    def write_pid(port: int = 0):
+        """PIDとポート番号をファイルに書き込む"""
+        try:
+            with open(PID_FILE, 'w') as f:
+                f.write(f"{os.getpid()}:{port}")
+            logger.info(f"PIDファイルを作成しました: {PID_FILE} (Port: {port})")
+        except Exception as e:
+            logger.error(f"PIDファイルの作成に失敗しました: {e}")
+
+    @staticmethod
+    def read_pid_info() -> Tuple[Optional[int], Optional[int]]:
+        """PIDファイルから (pid, port) を読み込む"""
+        try:
+            if os.path.exists(PID_FILE):
+                with open(PID_FILE, 'r') as f:
+                    content = f.read().strip()
+                    if ':' in content:
+                        pid, port = content.split(':')
+                        return int(pid), int(port)
+                    else:
+                        return int(content), 0
+        except Exception as e:
+            logger.error(f"PIDファイルの読み込みに失敗しました: {e}")
+        return None, None
+
+    @staticmethod
+    def remove_pid():
+        """PIDファイルを削除する"""
+        try:
+            if os.path.exists(PID_FILE):
+                os.remove(PID_FILE)
+                logger.info(f"PIDファイルを削除しました: {PID_FILE}")
+        except Exception as e:
+            logger.error(f"PIDファイルの削除に失敗しました: {e}")
+
+    @staticmethod
+    def is_process_running(pid):
+        """指定されたPIDのプロセスが実行中かチェック"""
+        try:
+            process = psutil.Process(pid)
+            return process.is_running()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+
+    @staticmethod
+    def send_show_command(port):
+        """指定されたポートにSHOWコマンドを送信する"""
+        if port <= 0:
+            return False
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.connect(('127.0.0.1', port))
+                s.sendall(b'SHOW_WINDOW')
+                return True
+        except Exception as e:
+            logger.error(f"IPC通信エラー: {e}")
+            return False
 
 def decode_str(s):
     """メールヘッダのデコード処理"""

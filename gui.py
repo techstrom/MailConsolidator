@@ -9,9 +9,11 @@ import os
 from typing import Dict, Any
 
 # core.py からロジックをインポート
-from core import run_batch
+# core.py からロジックをインポート
+from core import run_batch, PIDManager
 from crypto_helper import PasswordCrypto
 import copy
+import socket
 
 # Windows環境でのみシステムトレイをインポート
 if os.name == 'nt':
@@ -22,6 +24,30 @@ if os.name == 'nt':
         TRAY_AVAILABLE = False
 else:
     TRAY_AVAILABLE = False
+
+class IPCServer:
+    def __init__(self, app):
+        self.app = app
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(('127.0.0.1', 0)) # 0 means auto-assign port
+        self.port = self.sock.getsockname()[1]
+        self.sock.listen(1)
+        self.thread = threading.Thread(target=self._listen_loop, daemon=True)
+        self.thread.start()
+        logging.info(f"IPCサーバーを開始しました (Port: {self.port})")
+
+    def _listen_loop(self):
+        while True:
+            try:
+                conn, addr = self.sock.accept()
+                with conn:
+                    data = conn.recv(1024)
+                    if data == b'SHOW_WINDOW':
+                        logging.info("GUI表示リクエストを受信しました")
+                        self.app.root.after(0, self.app.show_window)
+            except Exception as e:
+                logging.error(f"IPCサーバーエラー: {e}")
+                break
 
 class QueueHandler(logging.Handler):
     """ログをキューに保存するハンドラ"""
@@ -74,9 +100,18 @@ class MailConsolidatorApp:
         self.stop_event = threading.Event()
         self.bg_thread = None
         self.tray_icon = None
+        self.ipc_server = None
 
         self.create_widgets()
         self.setup_logging()
+        
+        # IPCサーバー起動とPIDファイル作成
+        try:
+            self.ipc_server = IPCServer(self)
+            PIDManager.write_pid(self.ipc_server.port)
+        except Exception as e:
+            logging.error(f"IPCサーバーの起動に失敗しました: {e}")
+            # IPC失敗しても起動は継続するが、PIDファイルは作成されないかも
         
         # Windows環境ならシステムトレイを初期化
         if TRAY_AVAILABLE:
@@ -612,6 +647,9 @@ class MailConsolidatorApp:
         """アプリケーションを完全に終了"""
         if self.is_running:
             self.stop_event.set()
+        
+        # PIDファイルを削除
+        PIDManager.remove_pid()
         
         # トレイアイコンを停止
         if TRAY_AVAILABLE and self.tray_icon:

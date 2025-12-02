@@ -12,7 +12,7 @@ import psutil
 from typing import Dict, Any
 
 # コアロジックをインポート
-from core import run_batch
+from core import run_batch, PIDManager
 from crypto_helper import PasswordCrypto
 
 def setup_logging(verbose: bool, log_file: str = None):
@@ -35,7 +35,132 @@ def setup_logging(verbose: bool, log_file: str = None):
         force=True  # 既存の設定を上書き
     )
 
-# ... (PID related functions remain unchanged) ...
+logger = logging.getLogger(__name__)
+
+def load_config(config_path: str) -> Dict[str, Any]:
+    """設定ファイルを読み込み、パスワードを復号化する"""
+    try:
+        if not os.path.exists(config_path):
+            logger.error(f"設定ファイルが見つかりません: {config_path}")
+            sys.exit(1)
+            
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f) or {}
+        
+        # パスワードを復号化
+        crypto = PasswordCrypto()
+        
+        # 移動先パスワードを復号化
+        if 'destination' in config and 'password' in config['destination']:
+            password = config['destination']['password']
+            if crypto.is_encrypted(password):
+                try:
+                    config['destination']['password'] = crypto.decrypt(password)
+                except Exception as e:
+                    logger.error(f"移動先パスワードの復号化に失敗しました: {e}")
+                    sys.exit(1)
+        
+        # 取得元パスワードを復号化
+        if 'sources' in config:
+            for i, source in enumerate(config['sources']):
+                if 'password' in source:
+                    password = source['password']
+                    if crypto.is_encrypted(password):
+                        try:
+                            source['password'] = crypto.decrypt(password)
+                        except Exception as e:
+                            logger.error(f"取得元 #{i+1} のパスワード復号化に失敗しました: {e}")
+                            sys.exit(1)
+        
+        return config
+    except Exception as e:
+        logger.error(f"設定ファイルの読み込みに失敗しました: {e}")
+        sys.exit(1)
+
+def run_daemon(config_path: str):
+    """デーモンモードで実行"""
+    logger.info("デーモンモードで起動しました")
+    
+    # PIDファイルを作成
+    PIDManager.write_pid(0)  # デーモンモードではポート不要
+    
+    stop_event = threading.Event()
+
+    def signal_handler(signum, frame):
+        logger.info(f"シグナル {signum} を受信しました。終了処理を開始します...")
+        stop_event.set()
+        # PIDファイルを削除
+        PIDManager.remove_pid()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    while not stop_event.is_set():
+        config = load_config(config_path)
+        interval = config.get('interval', 3)
+        
+        try:
+            logger.info("=== 定期実行開始 ===")
+            result = run_batch(config, stop_event)
+            logger.info(result)
+        except Exception as e:
+            logger.error(f"実行エラー: {e}")
+            
+        if stop_event.is_set():
+            break
+            
+        logger.info(f"次回実行まで待機中... ({interval}分)")
+        
+        # interval分待機 (1秒ごとにstopフラグチェック)
+        for _ in range(interval * 60):
+            if stop_event.is_set():
+                break
+            time.sleep(1)
+            
+    # 正常終了時もPIDファイルを削除
+    PIDManager.remove_pid()
+    logger.info("デーモンプロセスを終了します")
+
+def kill_daemon():
+    """バックグラウンドで実行中のデーモンを停止する"""
+    pid, port = PIDManager.read_pid_info()
+    
+    if pid is None:
+        logger.error("PIDファイルが見つかりません。デーモンは起動していない可能性があります。")
+        return False
+    
+    if not PIDManager.is_process_running(pid):
+        logger.warning(f"PID {pid} のプロセスは実行されていません。")
+        PIDManager.remove_pid()
+        return False
+    
+    try:
+        logger.info(f"デーモンプロセス (PID: {pid}) を停止しています...")
+        process = psutil.Process(pid)
+        process.terminate()
+        
+        # プロセスが終了するまで待機 (最大10秒)
+        try:
+            process.wait(timeout=10)
+            logger.info("デーモンプロセスを正常に停止しました")
+        except psutil.TimeoutExpired:
+            logger.warning("プロセスが応答しないため、強制終了します")
+            process.kill()
+            logger.info("デーモンプロセスを強制終了しました")
+        
+        PIDManager.remove_pid()
+        return True
+        
+    except psutil.NoSuchProcess:
+        logger.error(f"PID {pid} のプロセスが見つかりません")
+        PIDManager.remove_pid()
+        return False
+    except psutil.AccessDenied:
+        logger.error(f"PID {pid} のプロセスへのアクセスが拒否されました")
+        return False
+    except Exception as e:
+        logger.error(f"プロセスの停止中にエラーが発生しました: {e}")
+        return False
 
 def main():
     # 内部フラグを先にチェック（argparseの前）
@@ -180,6 +305,28 @@ def main():
                 traceback.print_exc()
         else:
             # オプションなし: バックグラウンドでGUI起動（プロンプトが戻る）
+            
+            # 既存インスタンスをチェック
+            existing_pid, existing_port = PIDManager.read_pid_info()
+            if existing_pid and PIDManager.is_process_running(existing_pid):
+                # 既存のプロセスが実行中
+                if existing_port and existing_port > 0:
+                    # IPCでGUI表示を要求
+                    print(f"既存のインスタンスが見つかりました (PID: {existing_pid})")
+                    if PIDManager.send_show_command(existing_port):
+                        print("GUIを表示しました")
+                        sys.exit(0)
+                    else:
+                        print("既存インスタンスとの通信に失敗しました。新しいインスタンスを起動します...")
+                        PIDManager.remove_pid()  # 古いPIDファイルを削除
+                else:
+                    print("既存のインスタンスが見つかりましたが、IPC情報がありません。新しいインスタンスを起動します...")
+                    PIDManager.remove_pid()
+            elif existing_pid:
+                # PIDファイルは存在するがプロセスが動いていない
+                print("古いPIDファイルを削除します...")
+                PIDManager.remove_pid()
+            
             if os.name == 'nt':  # Windows
                 # 自分自身を再起動（--gui-worker フラグ付き）
                 if getattr(sys, 'frozen', False):
