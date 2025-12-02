@@ -121,7 +121,7 @@ python main.py -d
 
 - `-d`, `--daemon`: デーモンモードで実行（GUIなし、バックグラウンド実行）
 - `-k`, `--kill`: バックグラウンドで実行中のデーモンを停止
-- `-c`, `--config`: 設定ファイルのパスを指定（デフォルト: `config.yaml`）
+- `-c`, `--config`: 設定ファイルのパスを指定（デフォルト: Windows: `%APPDATA%\MailConsolidator\config.yaml`, Unix系: `~/.config/MailConsolidator/config.yaml`）
 - `-v`, `--verbose`: 詳細ログをコンソールに表示（GUIモード）
 - `-l`, `--log-file`: ログファイルのパスを指定（指定した場合のみファイルに出力）
 
@@ -203,6 +203,23 @@ Gmailアカウントで以下の設定を確認してください：
 - SSL: 有効
 
 ## 設定ファイル（config.yaml）
+
+### 設定ファイルの保存場所
+
+設定ファイルは、プラットフォームに応じた適切な場所に自動的に保存されます：
+
+- **Windows**: `%APPDATA%\MailConsolidator\config.yaml`
+  - 例: `C:\Users\あなたのユーザー名\AppData\Roaming\MailConsolidator\config.yaml`
+- **Unix系**: `~/.config/MailConsolidator/config.yaml`
+
+**既存の設定ファイルの移行**: 起動フォルダに古い `config.yaml` がある場合、初回起動時に自動的に新しい場所にコピーされます。古いファイルは削除されません。
+
+**カスタムパス**: `-c` オプションで任意の場所を指定できます：
+```bash
+python main.py -c "C:\custom\path\to\config.yaml"
+```
+
+### 設定ファイルの構造
 
 設定ファイルは以下の構造になっています：
 
@@ -312,6 +329,6 @@ sources:
 
 ## 注意事項
 
-- 設定ファイル（`config.yaml`）にはパスワードが平文で保存されます。ファイルのアクセス権限に注意してください
+- 設定ファイル（`config.yaml`）にはパスワードが暗号化されて保存されますが、ファイルのアクセス権限に注意してください
 - 大量のメールを処理する場合、初回実行に時間がかかる場合があります
 - メールサーバの接続数制限に注意してください（短時間に大量の接続を行うとブロックされる可能性があります）

@@ -14,10 +14,10 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 - `main.py`: アプリケーションの起動スクリプト。コマンドライン引数の解析とGUI/デーモンモードの切り替え、デーモンプロセスの管理（起動・停止）、単一インスタンス制御を行う。
 - `gui.py`: Tkinterを使用したGUIアプリケーションクラス `MailConsolidatorApp` と `IPCServer` を定義。Windows環境ではシステムトレイ機能も統合。
 - `tray_icon.py`: Windows環境でのシステムトレイアイコン管理クラス `SystemTrayIcon` を定義（Windows専用）。
-- `core.py`: メール集約の一括処理ロジック `run_batch` と、プロセス管理用の `PIDManager` クラスを定義。
+- `core.py`: メール集約の一括処理ロジック `run_batch`、プロセス管理用の `PIDManager` クラス、および設定ファイルパス管理用のヘルパー関数（`get_default_config_path`, `migrate_config_if_needed`）を定義。
 - `mail_client.py`: メールサーバとの通信を行うクラス群 (`Pop3Source`, `ImapSource`, `ImapDestination`)。
 - `crypto_helper.py`: パスワードの暗号化・復号化を行うユーティリティ。
-- `config.yaml`: ユーザー設定ファイル（YAML形式）。
+- `config.yaml`: ユーザー設定ファイル（YAML形式）。プラットフォームに応じた適切な場所に保存される。
 
 ## 2. 詳細仕様
 
@@ -83,6 +83,20 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
   - `is_process_running(pid)`: 指定されたPIDのプロセスが実行中かチェック。
   - `send_show_command(port)`: 指定されたポートに `SHOW_WINDOW` コマンドを送信（IPCクライアント機能）。
 
+#### 関数: `get_default_config_path()`
+- **目的**: プラットフォームに応じた適切な設定ファイルパスを返す。
+- **パス**:
+  - Windows: `%APPDATA%\MailConsolidator\config.yaml`
+  - Unix系: `~/.config/MailConsolidator/config.yaml`
+- **動作**: 必要に応じてディレクトリを自動作成。
+
+#### 関数: `migrate_config_if_needed()`
+- **目的**: 起動フォルダに古い設定ファイルがある場合、新しい場所にコピーする。
+- **動作**:
+  - 新しい場所に設定ファイルが既に存在する場合は何もしない。
+  - 起動フォルダに `config.yaml` がある場合、`shutil.copy2` で新しい場所にコピー。
+  - 古いファイルは削除されない（ユーザーが手動で削除可能）。
+
 #### クラス: `Pop3Source`
 - `get_messages()`: 全メッセージを取得する(POP3の仕様上、未読管理はクライアント側で行う必要があるが、本仕様では全件取得とし、重複排除は行わないため `delete_after_move=True` 推奨)。
 
@@ -133,7 +147,7 @@ MVC (Model-View-Controller) パターンに準じた構成を採用している�
 #### コマンドライン引数
 - `-d`, `--daemon`: デーモンモードで起動(バックグラウンド実行)。
 - `-k`, `--kill`: 実行中のデーモンを停止して即座に終了。
-- `-c`, `--config`: 設定ファイルのパスを指定(デフォルト: `config.yaml`)。
+- `-c`, `--config`: 設定ファイルのパスを指定(デフォルト: Windows: `%APPDATA%\MailConsolidator\config.yaml`, Unix系: `~/.config/MailConsolidator/config.yaml`)。
 - `-v`, `--verbose`: 詳細ログをコンソールに表示。
 - `-l`, `--log-file`: ログファイルのパスを指定。
 
@@ -173,3 +187,4 @@ sources:               # 取得元リスト
 - **バックグラウンド実行改善**: 定期実行の開始/停止トグルボタンの実装、UIブロックの解消、停止処理中のフィードバック追加。
 - **メール取得ロジック変更**: IMAP取得時に未読メールのみを対象とするよう変更。
 - **保持ポリシー変更**: `delete_after_move=False` の場合、ステータスモニターに履歴を残すよう変更。
+- **設定ファイル保存場所変更**: 起動フォルダからプラットフォーム固有の適切な場所（Windows: `%APPDATA%\MailConsolidator`, Unix系: `~/.config/MailConsolidator`）に変更。既存設定の自動移行機能を追加。
