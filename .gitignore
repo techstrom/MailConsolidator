@@ -12,4 +12,4 @@ test*
 *.log
 
 # cacert.pemを除外
-cacerta.pem
+cacert.pem
