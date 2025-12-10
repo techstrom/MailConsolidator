@@ -35,7 +35,7 @@ MailConsolidatorは、複数のメールサーバからメールを取得し、�
 Windows インストーラーを使用すると、簡単にインストールできます：
 
 1. **インストーラーをダウンロード**:
-   - [MailConsolidator-Setup-1.0.0.exe](https://github.com/techstrom/MailConsolidator/raw/main/installer_output/MailConsolidator-Setup-1.0.0.exe) をダウンロード
+   - [MailConsolidator-Setup-1.0.0.exe](https://github.com/techstrom/MailConsolidator/releases/download/v1.0.0/MailConsolidator-Setup-1.0.0.exe) をダウンロード
 
 2. **インストーラーを実行**:
    - ダウンロードした `MailConsolidator-Setup-1.0.0.exe` をダブルクリック
@@ -359,3 +359,4 @@ pyinstaller MailConsolidator.spec
 - 設定ファイル（`config.yaml`）にはパスワードが暗号化されて保存されますが、ファイルのアクセス権限に注意してください
 - 大量のメールを処理する場合、初回実行に時間がかかる場合があります
 - メールサーバの接続数制限に注意してください（短時間に大量の接続を行うとブロックされる可能性があります）
+
